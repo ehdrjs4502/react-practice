@@ -1,189 +1,202 @@
-import React, { useEffect, useState, useRef } from 'react';
-import styled from 'styled-components';
+import React, { useState } from "react";
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  DragOverlay,
+  UniqueIdentifier,
+  useSensors,
+  useSensor,
+  TouchSensor,
+  MouseSensor,
+} from "@dnd-kit/core";
+import styled from "styled-components";
 
 interface Props {
-  sentences: any[];
+  sentences: { textBefore: string; textAfter: string }[];
   options: string[];
-  activeInteraction: () => void;
-  showAnswer: boolean;
   correctAnswers: string[];
+  showAnswer: boolean;
+  activeInteraction: () => void;
 }
 
-export function DragAndDrop({
-  sentences,
-  options,
-  correctAnswers,
-  activeInteraction,
-  showAnswer,
-}: Props) {
+export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, activeInteraction }: Props) {
   const [availableOptions, setAvailableOptions] = useState(options);
   const [blanks, setBlanks] = useState<{ [key: string]: string }>(
-    Object.fromEntries(correctAnswers.map((_, idx) => [`blank${idx + 1}`, ''])),
+    Object.fromEntries(correctAnswers.map((_, idx) => [`blank${idx + 1}`, ""]))
   );
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
 
-  const [draggingOption, setDraggingOption] = useState<string | null>(null);
-  const dragOverlayRef = useRef<HTMLDivElement | null>(null);
+  const mouseSensor = useSensor(MouseSensor);
+  const touchSensor = useSensor(TouchSensor);
+  const sensors = useSensors(mouseSensor, touchSensor);
 
-  const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, option: string) => {
-    e.preventDefault();
-    setDraggingOption(option);
-
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-    if (dragOverlayRef.current) {
-      dragOverlayRef.current.style.display = 'block';
-      dragOverlayRef.current.style.left = `${clientX}px`;
-      dragOverlayRef.current.style.top = `${clientY}px`;
-      dragOverlayRef.current.textContent = option;
-    }
+  const handleDragStart = (event: { active: { id: UniqueIdentifier } }) => {
+    setActiveId(event.active.id);
   };
 
-  const handlePointerMove = (e: PointerEvent | TouchEvent) => {
-    const clientX = 'touches' in e ? e.touches[0].clientX : (e as PointerEvent).clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : (e as PointerEvent).clientY;
+  const handleDragEnd = (event: { active: { id: UniqueIdentifier }; over: { id: UniqueIdentifier } | null }) => {
+    const { active, over } = event;
 
-    if (draggingOption && dragOverlayRef.current) {
-      dragOverlayRef.current.style.left = `${clientX}px`;
-      dragOverlayRef.current.style.top = `${clientY}px`;
-    }
-  };
+    if (over) {
+      const targetId = over.id;
+      const draggedId = active.id;
 
-  const handlePointerUp = (e: React.PointerEvent | React.TouchEvent, blankId?: string) => {
-    e.preventDefault();
-    console.log('pointerUp')
-    if (draggingOption) {
-      setBlanks(prev => {
+      setBlanks((prev) => {
         const updatedBlanks = { ...prev };
-  
-        // 현재 DropZone의 기존 내용을 가져옴
-        const currentContent = blankId ? updatedBlanks[blankId] : null;
-  
-        // 드래그 시작 위치가 드랍존인지 확인
-        const sourceBlank = Object.keys(prev).find(key => prev[key] === draggingOption);
-  
-        if (blankId) {
-          if (sourceBlank) {
-            // 드랍존 간 교체
-            updatedBlanks[sourceBlank] = currentContent || ''; // 기존 값을 원래 위치로 복구
-          } else if (currentContent) {
-            // 드래그가 옵션에서 시작됐지만, 타겟 드랍존에 기존 값이 있는 경우
-            setAvailableOptions(prevOptions => {
-              if (!prevOptions.includes(currentContent)) {
-                return [...prevOptions, currentContent];
-              }
-              return prevOptions;
-            });
-          }
-  
-          // 새 드랍존에 드래그된 값 추가
-          updatedBlanks[blankId] = draggingOption;
-  
-          // 드래그 시작 위치가 옵션인 경우 제거
-          if (!sourceBlank) {
-            setAvailableOptions(prevOptions =>
-              prevOptions.filter(option => option !== draggingOption),
-            );
-          }
-        } 
-  
+
+        // 기존 값 추출
+        const currentContent = updatedBlanks[targetId];
+
+        // 블랭크에서 드래그 시작한 경우
+        const sourceBlank = Object.keys(prev).find((key) => prev[key] === draggedId);
+
+        if (sourceBlank) {
+          updatedBlanks[sourceBlank] = "";
+        }
+
+        // 드롭존 간 교체
+        if (currentContent && sourceBlank) {
+          updatedBlanks[sourceBlank] = currentContent;
+        } else if (currentContent) {
+          // 기존 값이 옵션으로 돌아감
+          setAvailableOptions((prevOptions) => [...prevOptions, currentContent]);
+        }
+
+        // 새 드롭존 값 설정
+        updatedBlanks[targetId] = draggedId as string;
+
         return updatedBlanks;
       });
-  
-      // 드래그 종료
-      setDraggingOption(null);
-  
-      // 드래그 오버레이 숨김
-      if (dragOverlayRef.current) {
-        dragOverlayRef.current.style.display = 'none';
+
+      // 옵션에서 드래그 시작한 경우
+      if (!Object.values(blanks).includes(activeId as string)) {
+        setAvailableOptions((prevOptions) => prevOptions.filter((option) => option !== activeId));
       }
-  
-      activeInteraction();
     }
+
+    setActiveId(null);
+    activeInteraction();
   };
-  
-  useEffect(() => {
-    const handleGlobalPointerUp = (e: any) => {
-      // 드랍존 외부에서 놓았을 경우 처리
-      handlePointerUp(e);
-    };
-
-    const handleGlobalPointerMove = (e: PointerEvent | TouchEvent) => {
-      handlePointerMove(e);
-    };
-
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-    window.addEventListener('pointermove', handleGlobalPointerMove);
-
-    return () => {
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
-      window.removeEventListener('pointermove', handleGlobalPointerMove);
-    };
-  }, [draggingOption]);
 
   return (
     <Container>
-      <DragOverlay ref={dragOverlayRef} />
-      {sentences.map((sentence, idx) => (
-        <Paragraph key={idx}>
-          {sentence.textBefore}{' '}
-          <DropZone
-            onPointerUp={e => handlePointerUp(e, `blank${idx + 1}`)}
-            onPointerDown={
-                blanks[`blank${idx + 1}`]
-                ? e => handlePointerDown(e, blanks[`blank${idx + 1}`])
-                : undefined
-            }
-            $isFilled={!!blanks[`blank${idx + 1}`]}
+      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
+        {sentences.map((sentence, idx) => (
+          <Paragraph key={idx}>
+            {sentence.textBefore}{" "}
+            <DropZone
+              id={`blank${idx + 1}`}
+              blanks={blanks}
+              showAnswer={showAnswer}
+              correctAnswer={correctAnswers[idx]}
             >
-            {blanks[`blank${idx + 1}`] || '\u00A0'}
-            </DropZone>
-            {' '}
-          {sentence.textAfter}
-        </Paragraph>
-      ))}
-      {!showAnswer && (
-        <>
-          <Instruction>* 아래 버튼을 드래그하여 올바른 위치에 놓아보세요.</Instruction>
-          <ButtonContainer>
-            {availableOptions.map(option => (
-              <DraggableButton
-                key={option}
-                onPointerDown={e => handlePointerDown(e, option)}
-                onTouchStart={e => handlePointerDown(e, option)}
-                onPointerUp={e => handlePointerUp(e)}
-              >
-                {option}
-              </DraggableButton>
-            ))}
-          </ButtonContainer>
-        </>
-      )}
+              {showAnswer
+                ? correctAnswers[idx]
+                : blanks[`blank${idx + 1}`] && (
+                    <Draggable id={blanks[`blank${idx + 1}`]}>{blanks[`blank${idx + 1}`]}</Draggable>
+                  )}
+            </DropZone>{" "}
+            {sentence.textAfter}
+          </Paragraph>
+        ))}
+
+        {!showAnswer && (
+          <>
+            <Instruction>* 아래 버튼을 드래그하여 올바른 위치에 놓아보세요.</Instruction>
+            <ButtonContainer>
+              {availableOptions.map((option) => (
+                <Draggable key={option} id={option}>
+                  {option}
+                </Draggable>
+              ))}
+            </ButtonContainer>
+          </>
+        )}
+      </DndContext>
     </Container>
   );
 }
 
-const Container = styled.div``;
+const Draggable = ({ id, children }: { id: UniqueIdentifier; children: React.ReactNode }) => {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id,
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
+
+  return (
+    <DraggableBox ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </DraggableBox>
+  );
+};
+
+const DropZone = ({
+  id,
+  blanks,
+  correctAnswer,
+  showAnswer,
+  children,
+}: {
+  id: string;
+  blanks: { [key: string]: string };
+  correctAnswer: string;
+  showAnswer: boolean;
+  children: React.ReactNode;
+}) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  const isFilled = !!blanks[id];
+  const isCorrect = blanks[id] === correctAnswer;
+
+  return (
+    <DropZoneBox ref={setNodeRef} $isOver={isOver} $isFilled={isFilled} $isCorrect={isCorrect} $showAnswer={showAnswer}>
+      {children || "\u00A0"}
+    </DropZoneBox>
+  );
+};
+
+const Container = styled.div`
+  position: relative;
+`;
 
 const Paragraph = styled.p`
   font-size: 15px;
   margin-bottom: 20px;
 `;
 
-const DropZone = styled.div<{
+const DropZoneBox = styled.div<{
+  $isOver: boolean;
   $isFilled: boolean;
+  $isCorrect: boolean;
+  $showAnswer: boolean;
 }>`
   display: inline-block;
-  width: ${props => (props.$isFilled ? '' : '178px')};
-  height: 30px;
-  box-sizing: border-box;
-  border: ${props => (props.$isFilled ? '' : '1px solid gray')};
+  width: ${(props) => (props.$showAnswer || props.$isFilled ? "" : "178px")};
+  height: ${(props) => (props.$showAnswer || props.$isFilled ? "" : "30px")};
+  border: 1px solid ${(props) => (props.$isOver ? "green" : "gray")};
+  background-color: ${(props) =>
+    props.$showAnswer ? (props.$isCorrect ? "blue" : "red") : props.$isFilled ? "yellow" : "white"};
   text-align: center;
-  border-radius: 4px;
   line-height: 30px;
   margin: 0 5px;
-  font-size: 14px;
-  background-color: ${props => (props.$isFilled ? 'yellow' : '#fff')};
+  border-radius: 4px;
+  padding: ${(props) => (props.$showAnswer ? "7px 8px" : "0px")};
+`;
+
+const DraggableBox = styled.div`
+  display: inline-flex;
+  padding: 7px 8px;
+  background-color: yellow;
+  border-radius: 4px;
+  cursor: grab;
+  text-align: center;
+  touch-action: manipulation;
 `;
 
 const ButtonContainer = styled.div`
@@ -191,33 +204,6 @@ const ButtonContainer = styled.div`
   flex-direction: column;
   gap: 6px;
   margin-top: 15px;
-`;
-
-const DraggableButton = styled.div`
-  display: inline-flex;
-  padding: 7px 8px;
-  box-sizing: border-box;
-  background-color: yellow;
-  color: black;
-  border-radius: 4px;
-  cursor: grab;
-  text-align: center;
-  font-size: 14px;
-
-  &:active {
-    cursor: grabbing;
-  }
-`;
-
-const DragOverlay = styled.div`
-  position: absolute;
-  display: none;
-  background-color: yellow;
-  color: black;
-  font-size: 14px;
-  padding: 5px;
-  border-radius: 4px;
-  pointer-events: none;
 `;
 
 const Instruction = styled.p`
