@@ -51,33 +51,33 @@ export function DragAndDrop({
 
   const handlePointerUp = (e: React.PointerEvent | React.TouchEvent, blankId?: string) => {
     e.preventDefault();
-  
+    console.log('pointerUp')
     if (draggingOption) {
-      if (blankId) {
-        setBlanks(prev => {
-          const updatedBlanks = { ...prev };
+      setBlanks(prev => {
+        const updatedBlanks = { ...prev };
   
-          // 현재 DropZone의 기존 내용을 가져옴
-          const currentContent = updatedBlanks[blankId];
+        // 현재 DropZone의 기존 내용을 가져옴
+        const currentContent = blankId ? updatedBlanks[blankId] : null;
   
-          // 드래그 시작 위치가 드랍존인지 확인
-          const sourceBlank = Object.keys(prev).find(key => prev[key] === draggingOption);
+        // 드래그 시작 위치가 드랍존인지 확인
+        const sourceBlank = Object.keys(prev).find(key => prev[key] === draggingOption);
   
+        if (blankId) {
           if (sourceBlank) {
-            // 이전 DropZone에서 값을 제거
-            updatedBlanks[sourceBlank] = '';
-          }
-  
-          // 새 DropZone에 값 추가
-          updatedBlanks[blankId] = draggingOption;
-  
-          // 기존 DropZone 값 복구
-          if (currentContent && sourceBlank) {
-            updatedBlanks[sourceBlank] = currentContent;
+            // 드랍존 간 교체
+            updatedBlanks[sourceBlank] = currentContent || ''; // 기존 값을 원래 위치로 복구
           } else if (currentContent) {
-            // 기존 값이 옵션으로 가야 하는 경우
-            setAvailableOptions(prevOptions => [...prevOptions, currentContent]);
+            // 드래그가 옵션에서 시작됐지만, 타겟 드랍존에 기존 값이 있는 경우
+            setAvailableOptions(prevOptions => {
+              if (!prevOptions.includes(currentContent)) {
+                return [...prevOptions, currentContent];
+              }
+              return prevOptions;
+            });
           }
+  
+          // 새 드랍존에 드래그된 값 추가
+          updatedBlanks[blankId] = draggingOption;
   
           // 드래그 시작 위치가 옵션인 경우 제거
           if (!sourceBlank) {
@@ -85,18 +85,10 @@ export function DragAndDrop({
               prevOptions.filter(option => option !== draggingOption),
             );
           }
+        } 
   
-          return updatedBlanks;
-        });
-      } else {
-        // 실패 시 드래그된 값을 옵션으로 복구
-        setAvailableOptions(prev => {
-          if (!prev.includes(draggingOption)) {
-            return [...prev, draggingOption];
-          }
-          return prev;
-        });
-      }
+        return updatedBlanks;
+      });
   
       // 드래그 종료
       setDraggingOption(null);
@@ -108,16 +100,24 @@ export function DragAndDrop({
   
       activeInteraction();
     }
-  };  
-
+  };
+  
   useEffect(() => {
-    const moveHandler = (e: PointerEvent | TouchEvent) => handlePointerMove(e);
-    window.addEventListener('pointermove', moveHandler);
-    window.addEventListener('touchmove', moveHandler);
+    const handleGlobalPointerUp = (e: any) => {
+      // 드랍존 외부에서 놓았을 경우 처리
+      handlePointerUp(e);
+    };
+
+    const handleGlobalPointerMove = (e: PointerEvent | TouchEvent) => {
+      handlePointerMove(e);
+    };
+
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointermove', handleGlobalPointerMove);
 
     return () => {
-      window.removeEventListener('pointermove', moveHandler);
-      window.removeEventListener('touchmove', moveHandler);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointermove', handleGlobalPointerMove);
     };
   }, [draggingOption]);
 
