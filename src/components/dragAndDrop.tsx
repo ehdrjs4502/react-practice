@@ -38,8 +38,8 @@ export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, ac
     const { active, over } = event;
 
     if (over) {
-      const targetDropZoneId = over.id;
       const draggedItemId = active.id;
+      const targetDropZoneId = over.id;
 
       setDropZoneContents((previousContents) => {
         const updatedContents = { ...previousContents };
@@ -79,6 +79,8 @@ export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, ac
     setCurrentDragId(null);
     activeInteraction();
   };
+
+  console.log("render parent");
 
   return (
     <Container>
@@ -132,6 +134,8 @@ const Draggable = ({ id, children }: { id: UniqueIdentifier; children: React.Rea
       }
     : undefined;
 
+  console.log("render draggble");
+
   return (
     <DraggableBox ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {children}
@@ -152,13 +156,15 @@ const DropZone = ({
   showAnswer: boolean;
   children: React.ReactNode;
 }) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
+  const { setNodeRef } = useDroppable({ id });
 
   const isFilled = !!contents[id];
   const isCorrect = contents[id] === correctAnswer;
 
+  console.log("render dropzone");
+
   return (
-    <DropZoneBox ref={setNodeRef} $isOver={isOver} $isFilled={isFilled} $isCorrect={isCorrect} $showAnswer={showAnswer}>
+    <DropZoneBox ref={setNodeRef} $isFilled={isFilled} $isCorrect={isCorrect} $showAnswer={showAnswer}>
       {children || "\u00A0"}
     </DropZoneBox>
   );
@@ -168,23 +174,17 @@ const Container = styled.div`
   position: relative;
 `;
 
-const Paragraph = styled.p`
+const Paragraph = styled.div`
   font-size: 15px;
   margin-bottom: 20px;
 `;
 
-const DropZoneBox = styled.div<{
-  $isOver: boolean;
-  $isFilled: boolean;
-  $isCorrect: boolean;
-  $showAnswer: boolean;
-}>`
+const DropZoneBox = styled.div<{ $isFilled: boolean; $isCorrect: boolean; $showAnswer: boolean }>`
   display: inline-block;
   width: ${(props) => (props.$showAnswer || props.$isFilled ? "" : "178px")};
   height: ${(props) => (props.$showAnswer || props.$isFilled ? "" : "30px")};
-  border: 1px solid ${(props) => (props.$isOver ? "green" : "gray")};
-  background-color: ${(props) =>
-    props.$showAnswer ? (props.$isCorrect ? "blue" : "red") : props.$isFilled ? "yellow" : "white"};
+  border: 1px solid gray;
+  background-color: ${(props) => (props.$showAnswer ? (props.$isCorrect ? "blue" : "red") : "white")};
   text-align: center;
   line-height: 30px;
   margin: 0 5px;
@@ -199,7 +199,7 @@ const DraggableBox = styled.div`
   border-radius: 4px;
   cursor: grab;
   text-align: center;
-  touch-action: manipulation;
+  touch-action: none;
 `;
 
 const OptionContainer = styled.div`
