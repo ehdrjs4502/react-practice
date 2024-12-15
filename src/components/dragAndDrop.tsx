@@ -39,48 +39,61 @@ export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, ac
 
     if (over) {
       const draggedItemId = active.id;
-      const targetDropZoneId = over.id;
+      const targetId = over.id;
 
-      setDropZoneContents((previousContents) => {
-        const updatedContents = { ...previousContents };
+      if (targetId === "optionContainer") {
+        // 옵션 영역으로 드랍된 경우
+        setRemainingOptions((prevOptions) =>
+          prevOptions.includes(draggedItemId as string) ? prevOptions : [...prevOptions, draggedItemId as string]
+        );
 
-        // 기존 값 추출
-        const currentDropZoneContent = updatedContents[targetDropZoneId];
+        // 드랍존에서 제거
+        setDropZoneContents((prev) => {
+          const updatedContents = { ...prev };
+          const sourceDropZoneId = Object.keys(prev).find((key) => prev[key] === draggedItemId);
+          if (sourceDropZoneId) updatedContents[sourceDropZoneId] = "";
+          return updatedContents;
+        });
+      } else {
+        setDropZoneContents((previousContents) => {
+          const updatedContents = { ...previousContents };
 
-        // 드래그 시작 위치가 드랍존인지 확인
-        const sourceDropZoneId = Object.keys(previousContents).find((key) => previousContents[key] === draggedItemId);
+          // 기존 값 추출
+          const currentDropZoneContent = updatedContents[targetId];
 
-        if (sourceDropZoneId) {
-          updatedContents[sourceDropZoneId] = "";
+          // 드래그 시작 위치가 드랍존인지 확인
+          const sourceDropZoneId = Object.keys(previousContents).find((key) => previousContents[key] === draggedItemId);
+
+          if (sourceDropZoneId) {
+            updatedContents[sourceDropZoneId] = "";
+          }
+
+          // 드롭존 간 교체
+          if (currentDropZoneContent && sourceDropZoneId) {
+            updatedContents[sourceDropZoneId] = currentDropZoneContent;
+          } else if (currentDropZoneContent && !sourceDropZoneId) {
+            // 기존 값이 옵션으로 돌아가야 하는 경우만 추가
+            setRemainingOptions((prevOptions) =>
+              prevOptions.includes(currentDropZoneContent) ? prevOptions : [...prevOptions, currentDropZoneContent]
+            );
+          }
+
+          // 새 드롭존 값 설정
+          updatedContents[targetId] = draggedItemId as string;
+
+          return updatedContents;
+        });
+
+        // 옵션에서 드래그 시작한 경우
+        if (!Object.values(dropZoneContents).includes(currentDragId as string)) {
+          setRemainingOptions((prevOptions) => prevOptions.filter((option) => option !== currentDragId));
         }
-
-        // 드롭존 간 교체
-        if (currentDropZoneContent && sourceDropZoneId) {
-          updatedContents[sourceDropZoneId] = currentDropZoneContent;
-        } else if (currentDropZoneContent && !sourceDropZoneId) {
-          // 기존 값이 옵션으로 돌아가야 하는 경우만 추가
-          setRemainingOptions((prevOptions) =>
-            prevOptions.includes(currentDropZoneContent) ? prevOptions : [...prevOptions, currentDropZoneContent]
-          );
-        }
-
-        // 새 드롭존 값 설정
-        updatedContents[targetDropZoneId] = draggedItemId as string;
-
-        return updatedContents;
-      });
-
-      // 옵션에서 드래그 시작한 경우
-      if (!Object.values(dropZoneContents).includes(currentDragId as string)) {
-        setRemainingOptions((prevOptions) => prevOptions.filter((option) => option !== currentDragId));
       }
     }
 
     setCurrentDragId(null);
     activeInteraction();
   };
-
-  console.log("render parent");
 
   return (
     <Container>
@@ -109,7 +122,7 @@ export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, ac
         {!showAnswer && (
           <>
             <Instruction>* 아래 버튼을 드래그하여 올바른 위치에 놓아보세요.</Instruction>
-            <OptionContainer>
+            <OptionContainer id="optionContainer">
               {remainingOptions.map((option) => (
                 <Draggable key={option} id={option}>
                   {option}
@@ -133,8 +146,6 @@ const Draggable = ({ id, children }: { id: UniqueIdentifier; children: React.Rea
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
       }
     : undefined;
-
-  console.log("render draggble");
 
   return (
     <DraggableBox ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -161,14 +172,33 @@ const DropZone = ({
   const isFilled = !!contents[id];
   const isCorrect = contents[id] === correctAnswer;
 
-  console.log("render dropzone");
-
   return (
     <DropZoneBox ref={setNodeRef} $isFilled={isFilled} $isCorrect={isCorrect} $showAnswer={showAnswer}>
       {children || "\u00A0"}
     </DropZoneBox>
   );
 };
+
+const OptionContainer = ({ id, children }: { id: string; children: React.ReactNode }) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <OptionBox ref={setNodeRef} $isOver={isOver}>
+      {children}
+    </OptionBox>
+  );
+};
+
+const OptionBox = styled.div<{ $isOver: boolean }>`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 15px;
+  border: 1px dashed gray;
+  padding: 10px;
+  min-height: 50px;
+  background-color: ${(props) => (props.$isOver ? "#f0f8ff" : "white")};
+`;
 
 const Container = styled.div`
   position: relative;
@@ -202,12 +232,12 @@ const DraggableBox = styled.div`
   touch-action: none;
 `;
 
-const OptionContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 15px;
-`;
+// const OptionContainer = styled.div`
+//   display: flex;
+//   flex-direction: column;
+//   gap: 6px;
+//   margin-top: 15px;
+// `;
 
 const Instruction = styled.p`
   font-size: 15px;
