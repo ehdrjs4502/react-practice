@@ -3,7 +3,6 @@ import {
   DndContext,
   useDraggable,
   useDroppable,
-  DragOverlay,
   UniqueIdentifier,
   useSensors,
   useSensor,
@@ -21,80 +20,84 @@ interface Props {
 }
 
 export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, activeInteraction }: Props) {
-  const [availableOptions, setAvailableOptions] = useState(options);
-  const [blanks, setBlanks] = useState<{ [key: string]: string }>(
-    Object.fromEntries(correctAnswers.map((_, idx) => [`blank${idx + 1}`, ""]))
+  const [remainingOptions, setRemainingOptions] = useState(options);
+  const [dropZoneContents, setDropZoneContents] = useState<{ [key: string]: string }>(
+    Object.fromEntries(correctAnswers.map((_, index) => [`dropZone${index + 1}`, ""]))
   );
-  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const [currentDragId, setCurrentDragId] = useState<UniqueIdentifier | null>(null);
 
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor);
   const sensors = useSensors(mouseSensor, touchSensor);
 
   const handleDragStart = (event: { active: { id: UniqueIdentifier } }) => {
-    setActiveId(event.active.id);
+    setCurrentDragId(event.active.id);
   };
 
   const handleDragEnd = (event: { active: { id: UniqueIdentifier }; over: { id: UniqueIdentifier } | null }) => {
     const { active, over } = event;
 
     if (over) {
-      const targetId = over.id;
-      const draggedId = active.id;
+      const targetDropZoneId = over.id;
+      const draggedItemId = active.id;
 
-      setBlanks((prev) => {
-        const updatedBlanks = { ...prev };
+      setDropZoneContents((previousContents) => {
+        const updatedContents = { ...previousContents };
 
         // 기존 값 추출
-        const currentContent = updatedBlanks[targetId];
+        const currentDropZoneContent = updatedContents[targetDropZoneId];
 
-        // 블랭크에서 드래그 시작한 경우
-        const sourceBlank = Object.keys(prev).find((key) => prev[key] === draggedId);
+        // 드래그 시작 위치가 드랍존인지 확인
+        const sourceDropZoneId = Object.keys(previousContents).find((key) => previousContents[key] === draggedItemId);
 
-        if (sourceBlank) {
-          updatedBlanks[sourceBlank] = "";
+        if (sourceDropZoneId) {
+          updatedContents[sourceDropZoneId] = "";
         }
 
         // 드롭존 간 교체
-        if (currentContent && sourceBlank) {
-          updatedBlanks[sourceBlank] = currentContent;
-        } else if (currentContent) {
-          // 기존 값이 옵션으로 돌아감
-          setAvailableOptions((prevOptions) => [...prevOptions, currentContent]);
+        if (currentDropZoneContent && sourceDropZoneId) {
+          updatedContents[sourceDropZoneId] = currentDropZoneContent;
+        } else if (currentDropZoneContent && !sourceDropZoneId) {
+          // 기존 값이 옵션으로 돌아가야 하는 경우만 추가
+          setRemainingOptions((prevOptions) =>
+            prevOptions.includes(currentDropZoneContent) ? prevOptions : [...prevOptions, currentDropZoneContent]
+          );
         }
 
         // 새 드롭존 값 설정
-        updatedBlanks[targetId] = draggedId as string;
+        updatedContents[targetDropZoneId] = draggedItemId as string;
 
-        return updatedBlanks;
+        return updatedContents;
       });
 
       // 옵션에서 드래그 시작한 경우
-      if (!Object.values(blanks).includes(activeId as string)) {
-        setAvailableOptions((prevOptions) => prevOptions.filter((option) => option !== activeId));
+      if (!Object.values(dropZoneContents).includes(currentDragId as string)) {
+        setRemainingOptions((prevOptions) => prevOptions.filter((option) => option !== currentDragId));
       }
     }
 
-    setActiveId(null);
+    setCurrentDragId(null);
     activeInteraction();
   };
 
   return (
     <Container>
       <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} sensors={sensors}>
-        {sentences.map((sentence, idx) => (
-          <Paragraph key={idx}>
+        {sentences.map((sentence, index) => (
+          <Paragraph key={index}>
             {sentence.textBefore}{" "}
             <DropZone
-              id={`blank${idx + 1}`}
-              blanks={blanks}
+              id={`dropZone${index + 1}`}
+              contents={dropZoneContents}
               showAnswer={showAnswer}
-              correctAnswer={correctAnswers[idx]}
+              correctAnswer={correctAnswers[index]}
             >
               {showAnswer
-                ? correctAnswers[idx]
-                : blanks[`blank${idx + 1}`] && (
-                    <Draggable id={blanks[`blank${idx + 1}`]}>{blanks[`blank${idx + 1}`]}</Draggable>
+                ? correctAnswers[index]
+                : dropZoneContents[`dropZone${index + 1}`] && (
+                    <Draggable id={dropZoneContents[`dropZone${index + 1}`]}>
+                      {dropZoneContents[`dropZone${index + 1}`]}
+                    </Draggable>
                   )}
             </DropZone>{" "}
             {sentence.textAfter}
@@ -104,13 +107,13 @@ export function DragAndDrop({ sentences, options, correctAnswers, showAnswer, ac
         {!showAnswer && (
           <>
             <Instruction>* 아래 버튼을 드래그하여 올바른 위치에 놓아보세요.</Instruction>
-            <ButtonContainer>
-              {availableOptions.map((option) => (
+            <OptionContainer>
+              {remainingOptions.map((option) => (
                 <Draggable key={option} id={option}>
                   {option}
                 </Draggable>
               ))}
-            </ButtonContainer>
+            </OptionContainer>
           </>
         )}
       </DndContext>
@@ -138,21 +141,21 @@ const Draggable = ({ id, children }: { id: UniqueIdentifier; children: React.Rea
 
 const DropZone = ({
   id,
-  blanks,
+  contents,
   correctAnswer,
   showAnswer,
   children,
 }: {
   id: string;
-  blanks: { [key: string]: string };
+  contents: { [key: string]: string };
   correctAnswer: string;
   showAnswer: boolean;
   children: React.ReactNode;
 }) => {
   const { setNodeRef, isOver } = useDroppable({ id });
 
-  const isFilled = !!blanks[id];
-  const isCorrect = blanks[id] === correctAnswer;
+  const isFilled = !!contents[id];
+  const isCorrect = contents[id] === correctAnswer;
 
   return (
     <DropZoneBox ref={setNodeRef} $isOver={isOver} $isFilled={isFilled} $isCorrect={isCorrect} $showAnswer={showAnswer}>
@@ -199,7 +202,7 @@ const DraggableBox = styled.div`
   touch-action: manipulation;
 `;
 
-const ButtonContainer = styled.div`
+const OptionContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 6px;
