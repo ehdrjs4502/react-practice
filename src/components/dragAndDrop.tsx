@@ -218,7 +218,7 @@ const DropZoneBox = styled.div<{ $isFilled: boolean; $isCorrect: boolean; $showA
   text-align: center;
   line-height: 30px;
   margin: 0 5px;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   padding: ${(props) => (props.$showAnswer ? "7px 8px" : "0px")};
 `;
 
